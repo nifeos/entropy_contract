@@ -1,9 +1,8 @@
 name: mutation
 on:
   schedule:
-    # This repository's own weekday, tried at 08, 10 and 12 UTC. Print the line with
-    # `python3 helpers/mutation_plan.py schedule <repository name>` in the template checkout.
-    - cron: '@MUTATION_CRON@'
+    # This repository's own weekday, tried at 08, 10 and 12 UTC.
+    - cron: '19 8,10,12 * * 1'
   workflow_dispatch:
 permissions:
   contents: read
