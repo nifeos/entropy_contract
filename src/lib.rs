@@ -10,7 +10,7 @@
 //! driver for one kind of random-number device.
 //!
 //! The interface number is [`INTERFACE_ID`] (12) and the version is [`VERSION`] (1).
-//!
+
 //! # Examples
 //!
 //! A service answers one request by checking that the word is well formed, checking the opcode,
