@@ -17,7 +17,8 @@ kind of random-number device.
 A `CALL` carries one request word and returns two reply words.
 
 - Request: the opcode in bits 63:56 (`OPERATION_SHIFT` is 56), the byte count in bits 7:0. There is
-  one operation, `GET` (1). Build a request with `request`, which refuses an opcode above 0xff with `OperationOutOfRange` in every build, and read it with `operation` and `requested_bytes`.
+  one operation, `GET` (1). Build a request with `request`, read it with `operation` and
+  `requested_bytes`. `request` refuses an opcode above 0xff with `OperationOutOfRange` in every build.
   A service answers any other opcode with `NO_ENTROPY`. Bits 55:8 are reserved: a client sends zero
   there, and a service answers a request with any of them set with `NO_ENTROPY`
   (`request_is_well_formed` says whether a word is well formed).
@@ -38,9 +39,10 @@ A `CALL` carries one request word and returns two reply words.
   all zero and, for a draw of at least `MAXIMUM_BYTES` bytes, not one value repeated (`readiness`
   decides). `READY` is 0x524E475550, `BRING_UP_FAILED` is 0xDEAD_0000_0000_0000 and `NO_ENTROPY`
   is 0. Otherwise it sends
-  `BRING_UP_FAILED | step` (`bring_up_failure`, which refuses a step above 0xff with `StepOutOfRange` in every build), where the step is `STEP_NO_FIRST_BYTES` (0x10, the
+  `BRING_UP_FAILED | step` (`bring_up_failure`), where the step is `STEP_NO_FIRST_BYTES` (0x10, the
   device never answered), `STEP_FIRST_ALL_ZERO` (0x11, every byte was zero) or
-  `STEP_FIRST_ALL_SAME` (0x12, at least `MAXIMUM_BYTES` bytes, every one equal and nonzero). Steps
+  `STEP_FIRST_ALL_SAME` (0x12, at least `MAXIMUM_BYTES` bytes, every one equal and nonzero).
+  `bring_up_failure` refuses a step above 0xff with `StepOutOfRange` in every build. Steps
   0x01 to 0x0f belong to each backend. This contract reserves steps 0x00 and 0x13 to 0xff for
   later shared steps and assigns none of them. Treating an
   all-zero first draw as a dead device is wrong with probability 2^-64 for an 8-byte draw down to
