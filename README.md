@@ -8,8 +8,22 @@
 The words a client and an entropy service exchange to move random bytes, and the rules for reading
 what comes back. `no_std`, no dependencies, no system calls of its own: the caller supplies the
 `CALL`. A `CALL` is the kernel's synchronous message call, one word in and two words back, sent to
-an endpoint: a capability that names the service. The service, its clients and a standard
-library's platform layer share this one definition, so they cannot drift.
+an endpoint: a capability that names the service. The service, its clients and any library that
+wraps the call share this one definition, so they cannot drift. A backend is the driver for one
+kind of random-number device.
+
+## Using it
+
+The crate is unpublished, and publishing is on hold. No release tag exists yet, so there is no tag
+to name; the tag is pending. Depend on it by git, pinned to a commit of this repository's `main`
+and never to a branch:
+
+```toml
+[dependencies]
+entropy_contract = { git = "https://github.com/nifeos/entropy_contract", rev = "<full commit hash>" }
+```
+
+Once a pre-release tag exists, use `tag = "<that tag>"` in place of `rev`.
 
 The service holds the random-number device. A client holds an endpoint that names no device, sends
 a request word naming a byte count, and gets the bytes back in the reply words. The service
@@ -39,22 +53,23 @@ A `CALL` carries one request word and returns two reply words.
 - Readiness: a service reports its bring-up on a second endpoint, its readiness endpoint, apart
   from the one clients call. It sends `READY` there only after it holds a first draw that is not
   all zero and, for a draw of at least `MAXIMUM_BYTES` bytes, not one value repeated (`readiness`
-  decides). Otherwise it sends
+  decides). `READY` is 0x524E475550, `BRING_UP_FAILED` is 0xDEAD_0000_0000_0000 and `NO_ENTROPY`
+  is 0. Otherwise it sends
   `BRING_UP_FAILED | step` (`bring_up_failure`), where the step is `STEP_NO_FIRST_BYTES` (0x10, the
   device never answered), `STEP_FIRST_ALL_ZERO` (0x11, every byte was zero) or
   `STEP_FIRST_ALL_SAME` (0x12, at least `MAXIMUM_BYTES` bytes, every one equal and nonzero). Steps
-  0x01 to 0x0f belong to each backend, the driver for one kind of random-number device. Treating an
+  0x01 to 0x0f belong to each backend. Steps 0x00 and 0x13 to 0xff are reserved for later shared
+  steps; this contract assigns none of them. Treating an
   all-zero first draw as a dead device is wrong with probability 2^-64 for an 8-byte draw down to
   2^-2048 for a 256-byte one. For eight equal bytes it is 255 in 2^64 or less. Both errors are the
   safe way round.
-- `INTERFACE_ID` (12) is this interface's number in a program's `INTERFACES` note, the section of
-  a program's binary that lists the interfaces it speaks. No other interface takes it, and a format
-  change is a new version, never a new number. The project that links these crates keeps the table
-  of numbers and holds it to that rule.
+- `INTERFACE_ID` (12) is this interface's number. No other interface takes it, and a format
+  change is a new version, never a new number.
 - `VERSION` (1) is the protocol's version: one number for the operation set and the reply shape. A
   break bumps it. A new opcode does not. A new field in the request word must be a new opcode or a
-  version bump, because a service refuses any request with a reserved bit set. A program declares
-  the pair of `INTERFACE_ID` and `VERSION` in its `INTERFACES` note.
+  version bump, because a service refuses any request with a reserved bit set. A program that
+  speaks this interface declares the pair of `INTERFACE_ID` and `VERSION` in the note that lists its
+  interfaces.
 - A service builds its reply with `reply`: the count, then the delivered bytes little-endian in the
   low bytes of the word, with zeros above them.
 
@@ -80,11 +95,37 @@ assert_eq!(MAXIMUM_BYTES, 8);
 ```
 
 `fill_with(out, call)` runs a stricter form of that loop, given a closure that performs the
-`CALL`: it refuses any reply whose count differs from the one it asked for. It returns
+`CALL`. It refuses a partial count because a caller filling a key must never hold fewer random
+bytes than it asked for and believe otherwise. It returns `Ok(())` for an empty slice without
+calling the closure. It refuses any reply whose count differs from the one it asked for. It returns
 `Err(Refusal::NoService)` when a reply is not a count, and `Err(Refusal::ShortReply { asked,
 delivered })` when a reply carries a different count than the request asked for, a larger one
 included. A dry device causes the second, so a caller can tell a missing grant from an empty
 source. `Refusal` is `#[non_exhaustive]`, so a `match` on it needs a wildcard arm.
+
+A service answers one request by checking that the word is well formed, checking the opcode,
+clamping the count and building the reply. Here `draw` stands in for the device:
+
+```rust
+use entropy_contract::{
+    GET, NO_ENTROPY, MAXIMUM_BYTES, operation, reply, request, request_is_well_formed,
+    requested_bytes,
+};
+
+fn handle(request_word: u64, draw: &mut impl FnMut(&mut [u8])) -> (u64, u64) {
+    if !request_is_well_formed(request_word) || operation(request_word) != GET {
+        return (NO_ENTROPY, 0);
+    }
+    let mut bytes = [0u8; MAXIMUM_BYTES as usize];
+    let count = requested_bytes(request_word) as usize; // already at most MAXIMUM_BYTES
+    draw(&mut bytes[..count]);
+    reply(&bytes[..count])
+}
+
+let mut device = |out: &mut [u8]| out.fill(0xab);
+assert_eq!(handle(request(GET, 3), &mut device), (3, 0x00ab_abab));
+assert_eq!(handle(request(2, 3), &mut device), (NO_ENTROPY, 0));
+```
 
 ## What is proven
 
@@ -111,6 +152,19 @@ Six Kani harnesses in `src/lib.rs` prove these properties, each within the state
   to 4 bytes, `readiness` answers `READY` when at least one byte is nonzero. Otherwise it names `STEP_NO_FIRST_BYTES`
   for an empty draw or `STEP_FIRST_ALL_ZERO` for a draw of zeros.
 
+The full harness paths, the property each proves and the falsification patch that turns it red
+(`cargo kani list` prints the harnesses; a patch is named `verification.<harness>.patch` and sits in
+`falsifications/`):
+
+| Harness | Property | Falsification patch |
+|---|---|---|
+| `verification::a_request_word_carries_its_opcode_and_clamped_count` | a request reads back as built | `verification.a_request_word_carries_its_opcode_and_clamped_count.patch` |
+| `verification::copying_writes_exactly_the_delivered_bytes` | a copy writes only the delivered bytes | `verification.copying_writes_exactly_the_delivered_bytes.patch` |
+| `verification::a_fill_succeeds_exactly_when_every_reply_is_full` | a fill succeeds exactly when every reply is full | `verification.a_fill_succeeds_exactly_when_every_reply_is_full.patch` |
+| `verification::a_reply_reads_back_as_built` | a reply reads back as built | `verification.a_reply_reads_back_as_built.patch` |
+| `verification::readiness_refuses_a_repeated_first_draw_of_at_least_eight_bytes` | readiness refuses a repeated first draw | `verification.readiness_refuses_a_repeated_first_draw_of_at_least_eight_bytes.patch` |
+| `verification::readiness_is_reported_exactly_when_a_first_byte_is_nonzero` | readiness is `READY` exactly when a byte is nonzero | `verification.readiness_is_reported_exactly_when_a_first_byte_is_nonzero.patch` |
+
 Every harness carries a falsification patch in `falsifications/`, a small defect that turns the
 harness red. Unit tests and doctests cover the rest, among them that no byte count collides with a
 kernel error.
@@ -132,7 +186,8 @@ doctest.
 
 Install Kani first: run `cargo install --locked
 kani-verifier --version 0.68.0`, then `cargo kani setup`. Setup downloads a model checker and the
-Rust toolchain Kani is pinned to, so it needs network access. Then run every harness:
+Rust toolchain Kani is pinned to, so it needs network access, and `cargo install` compiles Kani
+from source. Then run every harness:
 
 ```sh
 cargo kani
@@ -176,8 +231,7 @@ total.`, and `cargo kani` exits 1. Each patch's opening lines name the check it 
   2^-2048 by source, and the safe way round. It reads a first draw of eight or more equal bytes the
   same way: wrong with probability at most 255 in 2^64 for eight bytes from a uniform source. It
   does not judge a shorter draw for repeats.
-- Continuous health testing of the source is not part of this contract; the checks are bring-up
-  only.
+- Continuous health testing of the source is not part of this contract and is a decision still to be made by the project. The checks are bring-up only.
 - No request carries `VERSION`, and the service answers no query for the versions it serves, so a
   client built against another version is not refused at bind.
 
