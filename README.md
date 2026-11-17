@@ -130,7 +130,7 @@ Seven Kani harnesses in `src/lib.rs` prove these properties, each within the sta
 - A reply reads back as built: for any bytes up to 12, `reply` answers the count of the least of
   their number and `MAXIMUM_BYTES`. `delivered_bytes` accepts that count, `copy_delivered_bytes`
   returns the bytes in order, and every byte of the word above them is zero.
-- An opcode or a step past one byte is refused: for any value, `request` answers
+- An opcode or a step past one byte gets a refusal: for any value, `request` answers
   `OperationOutOfRange` exactly when it is above 0xff, and `bring_up_failure` answers
   `StepOutOfRange` exactly when it is above 0xff. Otherwise the word is neither `READY` nor a
   count, and its low byte is the step.
