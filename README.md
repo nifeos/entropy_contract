@@ -12,23 +12,6 @@ an endpoint: a capability that names the service. The service, its clients and a
 wraps the call share this one definition, so they cannot drift. A backend is the driver for one
 kind of random-number device.
 
-## Using it
-
-The crate is unpublished, and publishing is on hold. No release tag exists yet, so there is no tag
-to name; the tag is pending. Depend on it by git, pinned to a commit of this repository's `main`
-and never to a branch:
-
-```toml
-[dependencies]
-entropy_contract = { git = "https://github.com/nifeos/entropy_contract", rev = "<full commit hash>" }
-```
-
-Once a pre-release tag exists, use `tag = "<that tag>"` in place of `rev`.
-
-The service holds the random-number device. A client holds an endpoint that names no device, sends
-a request word naming a byte count, and gets the bytes back in the reply words. The service
-transforms no byte on the way, so the claim stays "these are the device's bytes".
-
 ## The contract
 
 A `CALL` carries one request word and returns two reply words.
@@ -58,8 +41,8 @@ A `CALL` carries one request word and returns two reply words.
   `BRING_UP_FAILED | step` (`bring_up_failure`), where the step is `STEP_NO_FIRST_BYTES` (0x10, the
   device never answered), `STEP_FIRST_ALL_ZERO` (0x11, every byte was zero) or
   `STEP_FIRST_ALL_SAME` (0x12, at least `MAXIMUM_BYTES` bytes, every one equal and nonzero). Steps
-  0x01 to 0x0f belong to each backend. Steps 0x00 and 0x13 to 0xff are reserved for later shared
-  steps; this contract assigns none of them. Treating an
+  0x01 to 0x0f belong to each backend. This contract reserves steps 0x00 and 0x13 to 0xff for
+  later shared steps and assigns none of them. Treating an
   all-zero first draw as a dead device is wrong with probability 2^-64 for an 8-byte draw down to
   2^-2048 for a 256-byte one. For eight equal bytes it is 255 in 2^64 or less. Both errors are the
   safe way round.
@@ -152,9 +135,9 @@ Six Kani harnesses in `src/lib.rs` prove these properties, each within the state
   to 4 bytes, `readiness` answers `READY` when at least one byte is nonzero. Otherwise it names `STEP_NO_FIRST_BYTES`
   for an empty draw or `STEP_FIRST_ALL_ZERO` for a draw of zeros.
 
-The full harness paths, the property each proves and the falsification patch that turns it red
-(`cargo kani list` prints the harnesses; a patch is named `verification.<harness>.patch` and sits in
-`falsifications/`):
+The table gives each harness's full path, the property it proves and the falsification patch that
+turns it red. `cargo kani list` prints the harnesses. A patch in `falsifications/` takes the name
+`verification.<harness>.patch`.
 
 | Harness | Property | Falsification patch |
 |---|---|---|
@@ -223,6 +206,23 @@ The failing run prints `Failed Checks: assertion failed: word == READY` and
 `VERIFICATION:- FAILED`. It ends with `Complete - 0 successfully verified harnesses, 1 failures, 1
 total.`, and `cargo kani` exits 1. Each patch's opening lines name the check it expects to fail.
 
+## Using it
+
+The project has not published this crate, and publishing is on hold. No release tag exists yet, so
+there is no tag to name; the tag is pending. Depend on it by git, pinned to a commit of this repository's `main`
+and never to a branch:
+
+```toml
+[dependencies]
+entropy_contract = { git = "https://github.com/nifeos/entropy_contract", rev = "<full commit hash>" }
+```
+
+Once a pre-release tag exists, use `tag = "<that tag>"` in place of `rev`.
+
+The service holds the random-number device. A client holds an endpoint that names no device, sends
+a request word naming a byte count, and gets the bytes back in the reply words. The service
+transforms no byte on the way, so the claim stays "these are the device's bytes".
+
 ## BUGS
 
 - A client cannot tell an unknown operation from a dry source: both are answered `NO_ENTROPY`, and
@@ -231,7 +231,7 @@ total.`, and `cargo kani` exits 1. Each patch's opening lines name the check it 
   2^-2048 by source, and the safe way round. It reads a first draw of eight or more equal bytes the
   same way: wrong with probability at most 255 in 2^64 for eight bytes from a uniform source. It
   does not judge a shorter draw for repeats.
-- Continuous health testing of the source is not part of this contract and is a decision still to be made by the project. The checks are bring-up only.
+- Continuous health testing of the source is not part of this contract and is a decision the project still has to make. The checks are bring-up only.
 - No request carries `VERSION`, and the service answers no query for the versions it serves, so a
   client built against another version is not refused at bind.
 

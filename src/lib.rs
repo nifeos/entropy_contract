@@ -40,8 +40,8 @@
 //! assert_eq!(handle(request(GET, 3) | (1 << 8), &mut device), (NO_ENTROPY, 0));
 //! ```
 //!
-//! Steps `0x00` and `0x13..=0xff` of a bring-up report are reserved for later shared steps. This
-//! contract assigns none of them.
+//! This contract reserves steps `0x00` and `0x13..=0xff` of a bring-up report for later shared
+//! steps and assigns none of them.
 
 //! # BUGS
 //!
@@ -49,7 +49,7 @@
 //!   2^-64 to 2^-2048 by source, and the safe way round. A first draw of eight or more equal
 //!   nonzero bytes is read the same way: wrong with probability at most 255 in 2^64 from a uniform
 //!   source.
-//! - Continuous health testing of the source is not part of this contract and is a decision still to be made by the project. The checks are bring-up only.
+//! - Continuous health testing of the source is not part of this contract and is a decision the project still has to make. The checks are bring-up only.
 //! - A service answers an unknown operation with [`NO_ENTROPY`], so a client cannot tell that
 //!   from a dry source. The reply has no room for a third answer.
 //! - No request carries [`VERSION`], and the service answers no query for the versions it serves,
@@ -212,8 +212,8 @@ pub const BRING_UP_FAILED: u64 = 0xDEAD_0000_0000_0000;
 /// bound. A dry source, an absent one, or a register window that reads as nothing.
 ///
 /// Steps `0x01..=0x0f` are each backend's own, so the shared steps start at `0x10` and cannot
-/// collide with them. Step `0x00` and steps `0x13..=0xff` are reserved for later shared steps;
-/// this contract assigns none of them.
+/// collide with them. This contract reserves step `0x00` and steps `0x13..=0xff` for later shared steps and assigns
+/// none of them.
 pub const STEP_NO_FIRST_BYTES: u64 = 0x10;
 
 /// The service asked, was answered, and every byte of the answer was zero. See [`readiness`] for
