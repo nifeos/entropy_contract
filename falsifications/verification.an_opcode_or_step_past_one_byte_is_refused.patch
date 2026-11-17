@@ -1,0 +1,21 @@
+Falsifies `entropy_contract::verification::an_opcode_or_step_past_one_byte_is_refused`.
+
+The defect: `request` lets an opcode of up to 0x1ff through. The opcode 0x100 is then built into a
+word, and the shift drops its high bit, so the word carries opcode 0 and a client that asked for
+one operation sends another. This is the release-build behavior the function had before it
+refused out-of-range values in every build.
+
+Expected to fail: the harness's `assert_eq!` that `request` is an error exactly when the opcode is
+above 0xff, for an opcode from 0x100 to 0x1ff.
+diff --git a/src/lib.rs b/src/lib.rs
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -116,7 +116,7 @@
+ /// assert_eq!(request(0x101, 3), Err(OperationOutOfRange));
+ /// ```
+ pub const fn request(operation: u64, byte_count: u64) -> Result<u64, OperationOutOfRange> {
+-    if operation > 0xff {
++    if operation > 0x1ff {
+         return Err(OperationOutOfRange);
+     }
+     Ok(pack_request(operation as u8, byte_count))

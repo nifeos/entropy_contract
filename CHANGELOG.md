@@ -6,6 +6,7 @@ sentence beside it.
 ## Unreleased
 
 - First version.
+- `request` and `bring_up_failure` return a `Result` and refuse an out-of-range opcode or step in a release build as well as a debug build, instead of panicking in one and accepting it in the other.
 
 ## BUGS
 

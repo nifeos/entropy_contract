@@ -34,10 +34,11 @@
 //! }
 //!
 //! let mut device = |out: &mut [u8]| out.fill(0xab);
-//! assert_eq!(handle(request(GET, 3), &mut device), (3, 0x00ab_abab));
-//! assert_eq!(handle(request(GET, 200), &mut device).0, MAXIMUM_BYTES);
-//! assert_eq!(handle(request(2, 3), &mut device), (NO_ENTROPY, 0));
-//! assert_eq!(handle(request(GET, 3) | (1 << 8), &mut device), (NO_ENTROPY, 0));
+//! assert_eq!(handle(request(GET, 3)?, &mut device), (3, 0x00ab_abab));
+//! assert_eq!(handle(request(GET, 200)?, &mut device).0, MAXIMUM_BYTES);
+//! assert_eq!(handle(request(2, 3)?, &mut device), (NO_ENTROPY, 0));
+//! assert_eq!(handle(request(GET, 3)? | (1 << 8), &mut device), (NO_ENTROPY, 0));
+//! # Ok::<(), entropy_contract::OperationOutOfRange>(())
 //! ```
 //!
 //! This contract reserves steps `0x00` and `0x13..=0xff` of a bring-up report for later shared
@@ -99,30 +100,48 @@ pub const GET: u64 = 1;
 /// a reply can hold, and a client that asks for 256 bytes is not mistaken for one that asks for
 /// none. The opcode must fit the top byte (at most 0xff).
 ///
-/// A debug build panics on an opcode above 0xff. A release build does not check: the shift drops
-/// the opcode's high bits, so the word carries the low byte of the opcode, which is a valid word
-/// for a different operation.
+/// # Errors
+///
+/// An opcode above 0xff is refused with [`OperationOutOfRange`], in a debug build and a release
+/// build alike. Encoding it would drop its high bits and send a valid word for a different
+/// operation, so no word is built.
 ///
 /// # Examples
 ///
 /// ```
-/// use entropy_contract::{GET, MAXIMUM_BYTES, request};
+/// use entropy_contract::{GET, MAXIMUM_BYTES, OperationOutOfRange, request};
 ///
-/// assert_eq!(request(GET, 3), 0x0100_0000_0000_0003);
+/// assert_eq!(request(GET, 3), Ok(0x0100_0000_0000_0003));
 /// assert_eq!(request(GET, 256), request(GET, MAXIMUM_BYTES)); // clamped
+/// assert_eq!(request(0x101, 3), Err(OperationOutOfRange));
 /// ```
-#[must_use]
-pub const fn request(operation: u64, byte_count: u64) -> u64 {
-    debug_assert!(
-        operation <= 0xff,
-        "an opcode fits the top byte of a request"
-    );
+pub const fn request(operation: u64, byte_count: u64) -> Result<u64, OperationOutOfRange> {
+    if operation > 0xff {
+        return Err(OperationOutOfRange);
+    }
+    Ok(pack_request(operation as u8, byte_count))
+}
+
+/// The refusal [`request`] gives an opcode that does not fit the top byte of a request word.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct OperationOutOfRange;
+
+impl core::fmt::Display for OperationOutOfRange {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter.write_str("an opcode fits the top byte of a request word (at most 0xff)")
+    }
+}
+
+impl core::error::Error for OperationOutOfRange {}
+
+/// Pack a request word from an opcode that is known to fit and a byte count to clamp.
+const fn pack_request(operation: u8, byte_count: u64) -> u64 {
     let clamped = if byte_count > MAXIMUM_BYTES {
         MAXIMUM_BYTES
     } else {
         byte_count
     };
-    (operation << OPERATION_SHIFT) | clamped
+    ((operation as u64) << OPERATION_SHIFT) | clamped
 }
 
 /// Whether a request word is well formed: bits 55:8, which carry no defined meaning, are zero.
@@ -139,9 +158,9 @@ pub const fn request(operation: u64, byte_count: u64) -> u64 {
 /// ```
 /// use entropy_contract::{GET, request, request_is_well_formed};
 ///
-/// assert!(request_is_well_formed(request(GET, 8)));
-/// assert!(!request_is_well_formed(request(GET, 8) | (1 << 8)));
-/// assert!(!request_is_well_formed(request(GET, 8) | (1 << 55)));
+/// assert!(request_is_well_formed(request(GET, 8).unwrap()));
+/// assert!(!request_is_well_formed(request(GET, 8).unwrap() | (1 << 8)));
+/// assert!(!request_is_well_formed(request(GET, 8).unwrap() | (1 << 55)));
 /// ```
 #[must_use]
 pub const fn request_is_well_formed(request_word: u64) -> bool {
@@ -158,7 +177,7 @@ const RESERVED_REQUEST_BITS: u64 = ((1u64 << OPERATION_SHIFT) - 1) & !0xff;
 /// ```
 /// use entropy_contract::{GET, operation, request};
 ///
-/// assert_eq!(operation(request(GET, 4)), GET);
+/// assert_eq!(operation(request(GET, 4).unwrap()), GET);
 /// ```
 #[must_use]
 pub const fn operation(request_word: u64) -> u64 {
@@ -176,7 +195,7 @@ pub const fn operation(request_word: u64) -> u64 {
 /// ```
 /// use entropy_contract::{GET, MAXIMUM_BYTES, request, requested_bytes};
 ///
-/// assert_eq!(requested_bytes(request(GET, 3)), 3);
+/// assert_eq!(requested_bytes(request(GET, 3).unwrap()), 3);
 /// // A hand-built word asking for 200 bytes is read as eight.
 /// assert_eq!(requested_bytes((1 << 56) | 200), MAXIMUM_BYTES);
 /// ```
@@ -230,21 +249,44 @@ pub const STEP_FIRST_ALL_SAME: u64 = 0x12;
 /// Build a bring-up failure's report word from the step that failed. A step fits the low byte
 /// (at most 0xff).
 ///
-/// A debug build panics on a step above 0xff. A release build does not check: the step is combined
-/// with [`BRING_UP_FAILED`] as given, so a step above 0xff sets bits above the low byte and the
-/// word no longer decodes as a step.
+/// # Errors
+///
+/// A step above 0xff is refused with [`StepOutOfRange`], in a debug build and a release build
+/// alike. Combining it with [`BRING_UP_FAILED`] would set bits above the low byte, and the word
+/// would no longer decode as a step, so no word is built.
 ///
 /// # Examples
 ///
 /// ```
-/// use entropy_contract::{BRING_UP_FAILED, STEP_FIRST_ALL_ZERO, bring_up_failure};
+/// use entropy_contract::{
+///     BRING_UP_FAILED, STEP_FIRST_ALL_ZERO, StepOutOfRange, bring_up_failure,
+/// };
 ///
-/// assert_eq!(bring_up_failure(STEP_FIRST_ALL_ZERO), BRING_UP_FAILED | 0x11);
+/// assert_eq!(bring_up_failure(STEP_FIRST_ALL_ZERO), Ok(BRING_UP_FAILED | 0x11));
+/// assert_eq!(bring_up_failure(0x100), Err(StepOutOfRange));
 /// ```
-#[must_use]
-pub const fn bring_up_failure(step: u64) -> u64 {
-    debug_assert!(step <= 0xff, "a step fits the low byte of a report word");
-    BRING_UP_FAILED | step
+pub const fn bring_up_failure(step: u64) -> Result<u64, StepOutOfRange> {
+    if step > 0xff {
+        return Err(StepOutOfRange);
+    }
+    Ok(report_failure(step as u8))
+}
+
+/// The refusal [`bring_up_failure`] gives a step that does not fit the low byte of a report word.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StepOutOfRange;
+
+impl core::fmt::Display for StepOutOfRange {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter.write_str("a step fits the low byte of a report word (at most 0xff)")
+    }
+}
+
+impl core::error::Error for StepOutOfRange {}
+
+/// Build a report word from a step that is known to fit.
+const fn report_failure(step: u8) -> u64 {
+    BRING_UP_FAILED | step as u64
 }
 
 /// Decide what a service may say about itself, given the first bytes it drew.
@@ -274,12 +316,12 @@ pub const fn bring_up_failure(step: u64) -> u64 {
 ///
 /// // A device that answered with nothing, and one that answered with zeros. Two different
 /// // failures, and the report word says which.
-/// assert_eq!(readiness([]), bring_up_failure(STEP_NO_FIRST_BYTES));
-/// assert_eq!(readiness([0; 32]), bring_up_failure(STEP_FIRST_ALL_ZERO));
+/// assert_eq!(Ok(readiness([])), bring_up_failure(STEP_NO_FIRST_BYTES));
+/// assert_eq!(Ok(readiness([0; 32])), bring_up_failure(STEP_FIRST_ALL_ZERO));
 /// assert_ne!(readiness([0; 32]), READY);
 ///
 /// // A source stuck on one nonzero value answered, and answered the same thing eight times.
-/// assert_eq!(readiness([0xff; 8]), bring_up_failure(STEP_FIRST_ALL_SAME));
+/// assert_eq!(Ok(readiness([0xff; 8])), bring_up_failure(STEP_FIRST_ALL_SAME));
 /// ```
 pub fn readiness(first_bytes: impl IntoIterator<Item = u8>) -> u64 {
     let mut first = 0;
@@ -296,11 +338,11 @@ pub fn readiness(first_bytes: impl IntoIterator<Item = u8>) -> u64 {
         count = count.saturating_add(1);
     }
     if count == 0 {
-        bring_up_failure(STEP_NO_FIRST_BYTES)
+        report_failure(STEP_NO_FIRST_BYTES as u8)
     } else if !any_nonzero {
-        bring_up_failure(STEP_FIRST_ALL_ZERO)
+        report_failure(STEP_FIRST_ALL_ZERO as u8)
     } else if all_same && count >= MAXIMUM_BYTES as usize {
-        bring_up_failure(STEP_FIRST_ALL_SAME)
+        report_failure(STEP_FIRST_ALL_SAME as u8)
     } else {
         READY
     }
@@ -379,7 +421,7 @@ pub const fn delivered_bytes(first_reply_word: u64) -> Option<usize> {
 /// let mut filled = 0;
 /// let mut round_trips = 0;
 /// while filled < key.len() {
-///     let (first_reply_word, reply_word) = service(request(GET, (key.len() - filled) as u64));
+///     let (first_reply_word, reply_word) = service(request(GET, (key.len() - filled) as u64).unwrap());
 ///     round_trips += 1;
 ///     // `None` would mean the word is a kernel error rather than a count. See below.
 ///     let byte_count = delivered_bytes(first_reply_word).expect("the service answered");
@@ -484,7 +526,7 @@ pub fn fill_with(out: &mut [u8], mut call: impl FnMut(u64) -> (u64, u64)) -> Res
     let mut filled = 0;
     while filled < out.len() {
         let asked = (out.len() - filled).min(MAXIMUM_BYTES as usize);
-        let (first_reply_word, reply_word) = call(request(GET, asked as u64));
+        let (first_reply_word, reply_word) = call(pack_request(GET as u8, asked as u64));
         let delivered = delivered_bytes(first_reply_word).ok_or(Refusal::NoService)?;
         if delivered != asked {
             return Err(Refusal::ShortReply { asked, delivered });
@@ -526,12 +568,12 @@ mod tests {
     /// Only bits 55:8 make a request ill formed; the opcode and the count do not.
     #[test]
     fn reserved_request_bits_are_refused() {
-        assert!(request_is_well_formed(request(GET, 0)));
-        assert!(request_is_well_formed(request(0xff, 8)));
+        assert!(request_is_well_formed(request(GET, 0).unwrap()));
+        assert!(request_is_well_formed(request(0xff, 8).unwrap()));
         assert!(request_is_well_formed(0xff));
         for bit in 8..56 {
             assert!(
-                !request_is_well_formed(request(GET, 8) | (1 << bit)),
+                !request_is_well_formed(request(GET, 8).unwrap() | (1 << bit)),
                 "bit {bit}"
             );
         }
@@ -617,7 +659,7 @@ mod tests {
 
     #[test]
     fn a_request_round_trips_its_opcode_and_count() {
-        let request_word = request(GET, 5);
+        let request_word = request(GET, 5).unwrap();
         assert_eq!(operation(request_word), GET);
         assert_eq!(requested_bytes(request_word), 5);
     }
@@ -627,7 +669,7 @@ mod tests {
     /// is the one place the shift is checked against a number the protocol does not define.
     #[test]
     fn the_request_word_layout_is_exact() {
-        let request_word = request(0x7f, 5);
+        let request_word = request(0x7f, 5).unwrap();
         assert_eq!(request_word, 0x7f00_0000_0000_0005);
         assert_eq!(operation(request_word), 0x7f);
         assert_eq!(requested_bytes(request_word), 5);
@@ -638,8 +680,11 @@ mod tests {
     /// either one enforcing it.
     #[test]
     fn an_oversized_request_is_clamped_rather_than_refused() {
-        assert_eq!(requested_bytes(request(GET, 200)), MAXIMUM_BYTES);
-        assert_eq!(requested_bytes(request(GET, MAXIMUM_BYTES)), MAXIMUM_BYTES);
+        assert_eq!(requested_bytes(request(GET, 200).unwrap()), MAXIMUM_BYTES);
+        assert_eq!(
+            requested_bytes(request(GET, MAXIMUM_BYTES).unwrap()),
+            MAXIMUM_BYTES
+        );
     }
 
     /// `request` clamps rather than truncating: 255, 256 and the largest count all read back as
@@ -647,12 +692,12 @@ mod tests {
     #[test]
     fn request_clamps_counts_the_low_byte_cannot_hold() {
         for byte_count in [255, 256, 257, 512, u64::MAX] {
-            let request_word = request(GET, byte_count);
+            let request_word = request(GET, byte_count).unwrap();
             assert_eq!(request_word, (GET << OPERATION_SHIFT) | MAXIMUM_BYTES);
             assert_eq!(operation(request_word), GET);
             assert_eq!(requested_bytes(request_word), MAXIMUM_BYTES);
         }
-        assert_eq!(requested_bytes(request(GET, 0)), 0);
+        assert_eq!(requested_bytes(request(GET, 0).unwrap()), 0);
     }
 
     /// The property the whole error story rests on: no count the service can send collides with
@@ -715,7 +760,7 @@ mod tests {
         );
         assert_eq!(
             readiness([0u8; 32]),
-            bring_up_failure(STEP_FIRST_ALL_ZERO),
+            bring_up_failure(STEP_FIRST_ALL_ZERO).unwrap(),
             "a zero bufferful must name its own step, not just refuse to be ready",
         );
     }
@@ -725,7 +770,10 @@ mod tests {
     /// that answered wrongly, which is what the two steps are for.
     #[test]
     fn nothing_at_all_and_all_zero_bytes_are_distinguishable() {
-        assert_eq!(readiness([]), bring_up_failure(STEP_NO_FIRST_BYTES));
+        assert_eq!(
+            readiness([]),
+            bring_up_failure(STEP_NO_FIRST_BYTES).unwrap()
+        );
         assert_ne!(
             readiness([]),
             readiness([0; 32]),
@@ -751,13 +799,13 @@ mod tests {
     /// A draw that varies anywhere, a short draw and the doc example's sparse draw stay ready.
     #[test]
     fn a_repeated_nonzero_first_draw_is_refused_under_its_own_step() {
-        let refused = bring_up_failure(STEP_FIRST_ALL_SAME);
+        let refused = bring_up_failure(STEP_FIRST_ALL_SAME).unwrap();
         assert_eq!(readiness([0xffu8; 8]), refused);
         assert_eq!(readiness([0x5au8; 32]), refused);
         assert_eq!(readiness([1u8; 256]), refused);
         assert_eq!(refused, 0xDEAD_0000_0000_0012);
-        assert_ne!(refused, bring_up_failure(STEP_FIRST_ALL_ZERO));
-        assert_ne!(refused, bring_up_failure(STEP_NO_FIRST_BYTES));
+        assert_ne!(refused, bring_up_failure(STEP_FIRST_ALL_ZERO).unwrap());
+        assert_ne!(refused, bring_up_failure(STEP_NO_FIRST_BYTES).unwrap());
         assert_eq!(
             readiness([0xffu8; 7]),
             READY,
@@ -783,11 +831,38 @@ mod tests {
             0x01,
             0xff,
         ] {
-            let word = bring_up_failure(step);
+            let word = bring_up_failure(step).unwrap();
             assert_ne!(word, READY);
             assert_eq!(delivered_bytes(word), None);
             assert_eq!(word & 0xff, step);
         }
+    }
+
+    /// An opcode above 0xff is refused, in every build, and 0xff is the largest accepted.
+    #[test]
+    fn an_opcode_past_the_top_byte_is_refused() {
+        assert_eq!(request(0xff, 0), Ok(0xff00_0000_0000_0000));
+        for opcode in [0x100, 0x101, 0x1ff, u64::MAX] {
+            assert_eq!(request(opcode, 3), Err(OperationOutOfRange), "{opcode:#x}");
+        }
+    }
+
+    /// A step above 0xff is refused, in every build, and 0xff is the largest accepted.
+    #[test]
+    fn a_step_past_the_low_byte_is_refused() {
+        assert_eq!(bring_up_failure(0xff), Ok(BRING_UP_FAILED | 0xff));
+        for step in [0x100, 0x101, 0xffff, u64::MAX] {
+            assert_eq!(bring_up_failure(step), Err(StepOutOfRange), "{step:#x}");
+        }
+    }
+
+    /// Each refusal says in words what it refused.
+    #[test]
+    fn the_refusals_describe_themselves() {
+        extern crate alloc;
+        use alloc::string::ToString;
+        assert!(OperationOutOfRange.to_string().contains("opcode"));
+        assert!(StepOutOfRange.to_string().contains("step"));
     }
 
     /// A short buffer is the caller's business, not a panic: `copy_delivered_bytes` fills what fits.
@@ -803,6 +878,28 @@ mod tests {
 mod verification {
     use super::*;
 
+    /// Falsification: replayable `falsifications/verification.an_opcode_or_step_past_one_byte_is_refused.patch`
+    /// An opcode or a step past one byte is refused, and one that fits is not. For any opcode,
+    /// [`request`] answers [`OperationOutOfRange`] exactly when it is above 0xff. For any step,
+    /// [`bring_up_failure`] answers [`StepOutOfRange`] exactly when it is above 0xff, and
+    /// otherwise a word that is neither [`READY`] nor a count and whose low byte is the step.
+    #[kani::proof]
+    fn an_opcode_or_step_past_one_byte_is_refused() {
+        let value: u64 = kani::any();
+        let byte_count: u64 = kani::any();
+        assert_eq!(request(value, byte_count).is_err(), value > 0xff);
+        match bring_up_failure(value) {
+            Err(StepOutOfRange) => assert!(value > 0xff),
+            Ok(word) => {
+                assert!(value <= 0xff);
+                assert_eq!(word & 0xff, value);
+                assert_eq!(word >> 8, BRING_UP_FAILED >> 8);
+                assert_ne!(word, READY);
+                assert!(delivered_bytes(word).is_none());
+            }
+        }
+    }
+
     /// Falsification: replayable `falsifications/verification.a_request_word_carries_its_opcode_and_clamped_count.patch`
     /// A request word carries its opcode and its clamped byte count. For any opcode that fits
     /// the top byte and any byte count, [`operation`] reads back the opcode and
@@ -812,7 +909,7 @@ mod verification {
         let opcode: u64 = kani::any();
         kani::assume(opcode <= 0xff);
         let byte_count: u64 = kani::any();
-        let request_word = request(opcode, byte_count);
+        let request_word = request(opcode, byte_count).unwrap();
         assert_eq!(operation(request_word), opcode);
         assert_eq!(requested_bytes(request_word), byte_count.min(MAXIMUM_BYTES));
     }
@@ -941,11 +1038,11 @@ mod verification {
         let all_zero = drawn.iter().all(|&byte| byte == 0);
         let repeated = drawn.iter().all(|&byte| byte == drawn[0]);
         if length == 0 {
-            assert_eq!(word, bring_up_failure(STEP_NO_FIRST_BYTES));
+            assert_eq!(word, bring_up_failure(STEP_NO_FIRST_BYTES).unwrap());
         } else if all_zero {
-            assert_eq!(word, bring_up_failure(STEP_FIRST_ALL_ZERO));
+            assert_eq!(word, bring_up_failure(STEP_FIRST_ALL_ZERO).unwrap());
         } else if repeated && length >= MAXIMUM_BYTES as usize {
-            assert_eq!(word, bring_up_failure(STEP_FIRST_ALL_SAME));
+            assert_eq!(word, bring_up_failure(STEP_FIRST_ALL_SAME).unwrap());
         } else {
             assert_eq!(word, READY);
         }
@@ -967,9 +1064,9 @@ mod verification {
         if drawn.iter().any(|&byte| byte != 0) {
             assert_eq!(word, READY);
         } else if length == 0 {
-            assert_eq!(word, bring_up_failure(STEP_NO_FIRST_BYTES));
+            assert_eq!(word, bring_up_failure(STEP_NO_FIRST_BYTES).unwrap());
         } else {
-            assert_eq!(word, bring_up_failure(STEP_FIRST_ALL_ZERO));
+            assert_eq!(word, bring_up_failure(STEP_FIRST_ALL_ZERO).unwrap());
         }
     }
 }

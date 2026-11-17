@@ -10,12 +10,12 @@ eight equal nonzero bytes.
 diff --git a/src/lib.rs b/src/lib.rs
 --- a/src/lib.rs
 +++ b/src/lib.rs
-@@ -218,7 +218,7 @@
-         bring_up_failure(STEP_NO_FIRST_BYTES)
+@@ -341,7 +341,7 @@
+         report_failure(STEP_NO_FIRST_BYTES as u8)
      } else if !any_nonzero {
-         bring_up_failure(STEP_FIRST_ALL_ZERO)
+         report_failure(STEP_FIRST_ALL_ZERO as u8)
 -    } else if all_same && count >= MAXIMUM_BYTES as usize {
 +    } else if all_same && count > MAXIMUM_BYTES as usize {
-         bring_up_failure(STEP_FIRST_ALL_SAME)
+         report_failure(STEP_FIRST_ALL_SAME as u8)
      } else {
          READY
