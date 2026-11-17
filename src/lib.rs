@@ -230,8 +230,8 @@ pub const STEP_FIRST_ALL_SAME: u64 = 0x12;
 /// Build a bring-up failure's report word from the step that failed. A step fits the low byte
 /// (at most 0xff).
 ///
-/// A debug build panics on a step above 0xff. A release build does not check: the step is combined with
-/// into [`BRING_UP_FAILED`] as given, so a step above 0xff sets bits above the low byte and the
+/// A debug build panics on a step above 0xff. A release build does not check: the step is combined
+/// with [`BRING_UP_FAILED`] as given, so a step above 0xff sets bits above the low byte and the
 /// word no longer decodes as a step.
 ///
 /// # Examples
