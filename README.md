@@ -17,7 +17,8 @@ kind of random-number device.
 A `CALL` carries one request word and returns two reply words.
 
 - Request: the opcode in bits 63:56 (`OPERATION_SHIFT` is 56), the byte count in bits 7:0. There is
-  one operation, `GET` (1). Build a request with `request`, read it with `operation` and `requested_bytes`.
+  one operation, `GET` (1). Build a request with `request`, read it with `operation` and
+  `requested_bytes`. `request` refuses an opcode above 0xff with `OperationOutOfRange` in every build.
   A service answers any other opcode with `NO_ENTROPY`. Bits 55:8 are reserved: a client sends zero
   there, and a service answers a request with any of them set with `NO_ENTROPY`
   (`request_is_well_formed` says whether a word is well formed).
@@ -40,7 +41,8 @@ A `CALL` carries one request word and returns two reply words.
   is 0. Otherwise it sends
   `BRING_UP_FAILED | step` (`bring_up_failure`), where the step is `STEP_NO_FIRST_BYTES` (0x10, the
   device never answered), `STEP_FIRST_ALL_ZERO` (0x11, every byte was zero) or
-  `STEP_FIRST_ALL_SAME` (0x12, at least `MAXIMUM_BYTES` bytes, every one equal and nonzero). Steps
+  `STEP_FIRST_ALL_SAME` (0x12, at least `MAXIMUM_BYTES` bytes, every one equal and nonzero).
+  `bring_up_failure` refuses a step above 0xff with `StepOutOfRange` in every build. Steps
   0x01 to 0x0f belong to each backend. This contract reserves steps 0x00 and 0x13 to 0xff for
   later shared steps and assigns none of them. Treating an
   all-zero first draw as a dead device is wrong with probability 2^-64 for an 8-byte draw down to
@@ -69,7 +71,7 @@ fn service(request_word: u64) -> (u64, u64) {
 let mut key = [0u8; 20];
 let mut filled = 0;
 while filled < key.len() {
-    let (first_reply_word, reply_word) = service(request(GET, (key.len() - filled) as u64));
+    let (first_reply_word, reply_word) = service(request(GET, (key.len() - filled) as u64).expect("GET fits"));
     let byte_count = delivered_bytes(first_reply_word).expect("the service answered");
     assert_ne!(byte_count, 0, "a zero count is NO_ENTROPY: fail, do not retry");
     filled += copy_delivered_bytes(byte_count, reply_word, &mut key[filled..]);
@@ -106,13 +108,13 @@ fn handle(request_word: u64, draw: &mut impl FnMut(&mut [u8])) -> (u64, u64) {
 }
 
 let mut device = |out: &mut [u8]| out.fill(0xab);
-assert_eq!(handle(request(GET, 3), &mut device), (3, 0x00ab_abab));
-assert_eq!(handle(request(2, 3), &mut device), (NO_ENTROPY, 0));
+assert_eq!(handle(request(GET, 3).expect("GET fits"), &mut device), (3, 0x00ab_abab));
+assert_eq!(handle(request(2, 3).expect("2 fits"), &mut device), (NO_ENTROPY, 0));
 ```
 
 ## What is proven
 
-Six Kani harnesses in `src/lib.rs` prove these properties, each within the stated bounds:
+Seven Kani harnesses in `src/lib.rs` prove these properties, each within the stated bounds:
 
 - A request word reads back as built: for any opcode that fits the top byte and any byte count,
   `operation` returns the opcode. `requested_bytes` returns the count, clamped to
@@ -128,6 +130,10 @@ Six Kani harnesses in `src/lib.rs` prove these properties, each within the state
 - A reply reads back as built: for any bytes up to 12, `reply` answers the count of the least of
   their number and `MAXIMUM_BYTES`. `delivered_bytes` accepts that count, `copy_delivered_bytes`
   returns the bytes in order, and every byte of the word above them is zero.
+- An opcode or a step past one byte gets a refusal: for any value, `request` answers
+  `OperationOutOfRange` exactly when it is above 0xff, and `bring_up_failure` answers
+  `StepOutOfRange` exactly when it is above 0xff. Otherwise the word is neither `READY` nor a
+  count, and its low byte is the step.
 - Readiness refuses a repeated first draw: for any first draw of up to 9 bytes, `readiness` names
   `STEP_FIRST_ALL_SAME` when the draw holds at least `MAXIMUM_BYTES` bytes of one nonzero value.
   It answers `READY` for every draw that is neither empty, zero nor such a repeat.
@@ -142,6 +148,7 @@ turns it red. `cargo kani list` prints the harnesses. A patch in `falsifications
 | Harness | Property | Falsification patch |
 |---|---|---|
 | `verification::a_request_word_carries_its_opcode_and_clamped_count` | a request reads back as built | `verification.a_request_word_carries_its_opcode_and_clamped_count.patch` |
+| `verification::an_opcode_or_step_past_one_byte_is_refused` | an opcode or a step past one byte is refused | `verification.an_opcode_or_step_past_one_byte_is_refused.patch` |
 | `verification::copying_writes_exactly_the_delivered_bytes` | a copy writes only the delivered bytes | `verification.copying_writes_exactly_the_delivered_bytes.patch` |
 | `verification::a_fill_succeeds_exactly_when_every_reply_is_full` | a fill succeeds exactly when every reply is full | `verification.a_fill_succeeds_exactly_when_every_reply_is_full.patch` |
 | `verification::a_reply_reads_back_as_built` | a reply reads back as built | `verification.a_reply_reads_back_as_built.patch` |
@@ -176,7 +183,7 @@ from source. Then run every harness:
 cargo kani
 ```
 
-The six harnesses take one to two minutes and peak near 2.2 gigabytes of memory, as
+The seven harnesses take one to two minutes and peak near 2.2 gigabytes of memory, as
 `/usr/bin/time -v cargo kani` measured on a shared 80-core x86_64 host. Almost all of the time is
 `a_fill_succeeds_exactly_when_every_reply_is_full`; each other harness takes seconds. To run one harness, give its full path, because
 `--exact` refuses a bare name:
@@ -188,7 +195,7 @@ cargo kani --harness verification::a_reply_reads_back_as_built --exact
 A passing run prints lines that look alarming and mean nothing. They are the `use of an unstable
 feature` warning for `register_tool`, the `Found the following unsupported constructs` warning, and
 many `aborting path on assume(false)` lines, which are paths Kani discards on purpose. The answer
-is the last line, `Complete - 6 successfully verified harnesses, 0 failures, 6 total.`, and
+is the last line, `Complete - 7 successfully verified harnesses, 0 failures, 7 total.`, and
 `cargo kani` exits 0.
 
 ### Running one falsification patch

@@ -9,17 +9,17 @@ Expected to fail: the harness's `assert_eq!` on `operation` or on `requested_byt
 diff --git a/src/lib.rs b/src/lib.rs
 --- a/src/lib.rs
 +++ b/src/lib.rs
-@@ -70,12 +70,7 @@
-         operation <= 0xff,
-         "an opcode fits the top byte of a request"
-     );
+@@ -136,12 +136,7 @@
+ 
+ /// Pack a request word from an opcode that is known to fit and a byte count to clamp.
+ const fn pack_request(operation: u8, byte_count: u64) -> u64 {
 -    let clamped = if byte_count > MAXIMUM_BYTES {
 -        MAXIMUM_BYTES
 -    } else {
 -        byte_count
 -    };
--    (operation << OPERATION_SHIFT) | clamped
-+    (operation << OPERATION_SHIFT) | byte_count
+-    ((operation as u64) << OPERATION_SHIFT) | clamped
++    ((operation as u64) << OPERATION_SHIFT) | byte_count
  }
  
  /// Whether a request word is well formed: bits 55:8, which carry no defined meaning, are zero.

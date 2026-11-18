@@ -11,9 +11,9 @@ leaves behind.
 diff --git a/src/lib.rs b/src/lib.rs
 --- a/src/lib.rs
 +++ b/src/lib.rs
-@@ -378,7 +378,7 @@
+@@ -528,7 +528,7 @@
          let asked = (out.len() - filled).min(MAXIMUM_BYTES as usize);
-         let (first_reply_word, reply_word) = call(request(GET, asked as u64));
+         let (first_reply_word, reply_word) = call(pack_request(GET as u8, asked as u64));
          let delivered = delivered_bytes(first_reply_word).ok_or(Refusal::NoService)?;
 -        if delivered != asked {
 +        if delivered > asked {

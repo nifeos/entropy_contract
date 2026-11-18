@@ -5,3 +5,6 @@
 
 # Mutation census row carried from the source tree, as counts: caught 37, missed 3, timeout 0, unviable 0.
 # The 3 missed mutant(s) are not listed here because the census did not record which; the first weekly mutation run names each, and each goes below as `<file>:<line> # <reason>`.
+
+src/lib.rs:144 # the opcode sits in bits 63:56 and the clamped count in bits 7:0, so | and ^ give the same word
+src/lib.rs:289 # BRING_UP_FAILED has only bits 63:48 set and a step only bits 7:0, so | and ^ give the same word
