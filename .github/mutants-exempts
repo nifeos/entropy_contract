@@ -8,3 +8,5 @@
 
 src/lib.rs:144 # the opcode sits in bits 63:56 and the clamped count in bits 7:0, so | and ^ give the same word
 src/lib.rs:289 # BRING_UP_FAILED has only bits 63:48 set and a step only bits 7:0, so | and ^ give the same word
+src/lib.rs:139 # a count equal to MAXIMUM_BYTES is clamped to MAXIMUM_BYTES, so > and >= give the same count
+src/lib.rs:205 # a count equal to MAXIMUM_BYTES is clamped to MAXIMUM_BYTES, so > and >= give the same count
