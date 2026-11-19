@@ -161,7 +161,12 @@ kernel error.
 
 ## Building and testing
 
+You need `git`, a Rust toolchain installed with [rustup](https://rustup.rs) and a C linker. The
+proofs also need `patch`. Get the source and build from its top directory:
+
 ```sh
+git clone https://github.com/nifeos/entropy_contract
+cd entropy_contract
 cargo test
 rustup target add x86_64-unknown-none aarch64-unknown-none-softfloat riscv64imac-unknown-none-elf
 cargo build --lib --target x86_64-unknown-none
@@ -183,8 +188,8 @@ from source. Then run every harness:
 cargo kani
 ```
 
-The seven harnesses take one to two minutes and peak near 2.2 gigabytes of memory, as
-`/usr/bin/time -v cargo kani` measured on a shared 80-core x86_64 host. Almost all of the time is
+The seven harnesses take about one minute and peak near 2.2 gigabytes of memory, as
+`/usr/bin/time -v cargo kani` (Linux only; macOS has no `-v`) measured on a shared 80-core x86_64 host. Almost all of the time is
 `a_fill_succeeds_exactly_when_every_reply_is_full`; each other harness takes seconds. To run one harness, give its full path, because
 `--exact` refuses a bare name:
 
@@ -209,7 +214,8 @@ cargo kani --harness verification::readiness_is_reported_exactly_when_a_first_by
 patch -R -p1 --no-backup-if-mismatch < falsifications/verification.readiness_is_reported_exactly_when_a_first_byte_is_nonzero.patch
 ```
 
-The failing run prints `Failed Checks: assertion failed: word == READY` and
+`patch` may report `Hunk #1 succeeded at` a line number with an `offset`; that is harmless. The
+failing run prints `Failed Checks: assertion failed: word == READY` and
 `VERIFICATION:- FAILED`. It ends with `Complete - 0 successfully verified harnesses, 1 failures, 1
 total.`, and `cargo kani` exits 1. Each patch's opening lines name the check it expects to fail.
 
