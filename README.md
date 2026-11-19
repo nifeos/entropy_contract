@@ -180,9 +180,12 @@ doctest.
 ### Running the proofs
 
 Install Kani first: run `cargo install --locked
-kani-verifier --version 0.68.0`, then `cargo kani setup`. Setup downloads a model checker and the
-Rust toolchain Kani is pinned to, so it needs network access, and `cargo install` compiles Kani
-from source. Then run every harness:
+kani-verifier --version 0.68.0`, then `cargo kani setup`. Both need network access. `cargo
+install` builds only Kani's small installer, about ten crates. Setup downloads Kani's release
+bundle, about 140 megabytes, and the nightly Rust toolchain Kani is pinned to. It then holds
+about 485 megabytes in `~/.kani` and 1.5 gigabytes in `~/.rustup`. On the host measured below,
+from empty Cargo and rustup directories, the install took 5 seconds and setup 30. Release bundles
+exist for x86_64 and aarch64 Linux and macOS, and not for Windows. Then run every harness:
 
 ```sh
 cargo kani
