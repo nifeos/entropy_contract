@@ -1,9 +1,9 @@
 # entropy_contract
 
-[![check](https://github.com/nifeos/entropy_contract/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/nifeos/entropy_contract/actions/workflows/ci.yml?query=branch%3Amain)
-[![proofs](https://github.com/nifeos/entropy_contract/actions/workflows/proofs.yml/badge.svg?branch=main)](https://github.com/nifeos/entropy_contract/actions/workflows/proofs.yml?query=branch%3Amain)
-[![license](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](https://github.com/nifeos/entropy_contract#license)
-[![minimum Rust version](https://img.shields.io/badge/rust-1.88%2B-blue.svg)](https://github.com/nifeos/entropy_contract/blob/main/Cargo.toml)
+[![check](https://github.com/partsfoundry/entropy_contract/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/partsfoundry/entropy_contract/actions/workflows/ci.yml?query=branch%3Amain)
+[![proofs](https://github.com/partsfoundry/entropy_contract/actions/workflows/proofs.yml/badge.svg?branch=main)](https://github.com/partsfoundry/entropy_contract/actions/workflows/proofs.yml?query=branch%3Amain)
+[![license](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](https://github.com/partsfoundry/entropy_contract#license)
+[![minimum Rust version](https://img.shields.io/badge/rust-1.88%2B-blue.svg)](https://github.com/partsfoundry/entropy_contract/blob/main/Cargo.toml)
 
 The words a client and an entropy service exchange to move random bytes, and the rules for reading
 what comes back. `no_std`, no dependencies, no system calls of its own: the caller supplies the
@@ -165,7 +165,7 @@ You need `git`, a Rust toolchain installed with [rustup](https://rustup.rs) and 
 proofs also need `patch`. Get the source and build from its top directory:
 
 ```sh
-git clone https://github.com/nifeos/entropy_contract
+git clone https://github.com/partsfoundry/entropy_contract
 cd entropy_contract
 cargo test
 rustup target add x86_64-unknown-none aarch64-unknown-none-softfloat riscv64imac-unknown-none-elf
@@ -230,7 +230,7 @@ and never to a branch:
 
 ```toml
 [dependencies]
-entropy_contract = { git = "https://github.com/nifeos/entropy_contract", rev = "<full commit hash>" }
+entropy_contract = { git = "https://github.com/partsfoundry/entropy_contract", rev = "<full commit hash>" }
 ```
 
 Once a pre-release tag exists, use `tag = "<that tag>"` in place of `rev`.
