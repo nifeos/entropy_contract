@@ -10,7 +10,7 @@ and a later one is not.
 diff --git a/src/lib.rs b/src/lib.rs
 --- a/src/lib.rs
 +++ b/src/lib.rs
-@@ -205,7 +205,7 @@
+@@ -328,7 +328,7 @@
      let mut count = 0usize;
      let mut all_same = true;
      let mut any_nonzero = false;

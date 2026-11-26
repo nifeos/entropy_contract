@@ -889,7 +889,9 @@ mod verification {
         let byte_count: u64 = kani::any();
         assert_eq!(request(value, byte_count).is_err(), value > 0xff);
         match bring_up_failure(value) {
-            Err(StepOutOfRange) => assert!(value > 0xff),
+            Err(StepOutOfRange) => {
+                assert!(value > 0xff);
+            }
             Ok(word) => {
                 assert!(value <= 0xff);
                 assert_eq!(word & 0xff, value);

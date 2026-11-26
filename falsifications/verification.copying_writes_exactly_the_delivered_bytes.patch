@@ -10,7 +10,7 @@ whose word reads differently from each end.
 diff --git a/src/lib.rs b/src/lib.rs
 --- a/src/lib.rs
 +++ b/src/lib.rs
-@@ -312,7 +312,7 @@
+@@ -435,7 +435,7 @@
  #[must_use]
  pub fn copy_delivered_bytes(byte_count: usize, reply_word: u64, out: &mut [u8]) -> usize {
      let copied = byte_count.min(MAXIMUM_BYTES as usize).min(out.len());

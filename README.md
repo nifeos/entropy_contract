@@ -80,7 +80,8 @@ assert_eq!(MAXIMUM_BYTES, 8);
 ```
 
 `fill_with(out, call)` runs a stricter form of that loop, given a closure that performs the
-`CALL`. It refuses a partial count because a caller filling a key must never hold fewer random
+`CALL`: an `FnMut(u64) -> (u64, u64)` that takes the request word and returns the two reply
+words. It refuses a partial count because a caller filling a key must never hold fewer random
 bytes than it asked for and believe otherwise. It returns `Ok(())` for an empty slice without
 calling the closure. It refuses any reply whose count differs from the one it asked for. It returns
 `Err(Refusal::NoService)` when a reply is not a count, and `Err(Refusal::ShortReply { asked,
