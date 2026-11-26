@@ -8,7 +8,7 @@ Expected to fail: the harness, on the slice index that runs past the word's eigh
 diff --git a/src/lib.rs b/src/lib.rs
 --- a/src/lib.rs
 +++ b/src/lib.rs
-@@ -340,7 +340,7 @@
+@@ -463,7 +463,7 @@
  /// ```
  #[must_use]
  pub fn reply(delivered: &[u8]) -> (u64, u64) {
