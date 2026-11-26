@@ -18,4 +18,34 @@ What a run is:
    not against the stranger.
 4. Record the date on the line below.
 
-Last run: 2026-11-19
+Last run: 2026-11-26
+
+## What the last run did
+
+A fresh clone and the README, with empty Cargo, rustup and home directories, on a shared 80-core
+x86_64 Linux host. Rust came from rustup.rs, and the run followed "Building and testing", "Running
+the proofs", "Running one falsification patch", "Using it" and "Minimum Rust version" command by
+command.
+
+- `cargo test` passes, and `cargo build --lib` passes for `x86_64-unknown-none`,
+  `aarch64-unknown-none-softfloat` and `riscv64imac-unknown-none-elf`.
+- The Kani install took 4 seconds and setup 23. Kani then held 485 megabytes in `~/.kani` and its
+  nightly toolchain 1.5 gigabytes in `~/.rustup`.
+- `cargo kani` ends with `Complete - 7 successfully verified harnesses, 0 failures, 7 total.` and
+  exits 0, in about one minute at a peak of 2.2 gigabytes. One harness by its full path takes
+  about 4 seconds, and Kani refuses a bare name.
+- With the `readiness_is_reported_exactly_when_a_first_byte_is_nonzero` falsification applied,
+  that harness fails with `assertion failed: word == READY` and exits 1. The reversed patch
+  leaves `git status` clean. Each of the other six patches also turns its harness red.
+- A scratch crate that depends on this repository by `git` and `rev` builds and runs `fill_with`.
+- At Rust 1.88, the stated minimum, the tests and the three bare-metal builds pass.
+
+The run found three things. `cargo kani` printed a future-incompatibility warning,
+`trailing semicolon in macro used in expression position`, that the README did not list among
+the alarming lines; the proof arm it came from is now a block, and the warning is gone. Three
+falsification patches applied 123 lines off; this version rebases them. The README did not give the type of
+the closure `fill_with` takes; it now does.
+
+Result: pass on the build, the tests and the proofs, with one omission in the README, one
+warning from the code and three stale patches. This version corrects each of them, and a second fresh clone of it
+followed the README to the same results with neither.
